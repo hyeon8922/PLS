@@ -1,0 +1,281 @@
+% Coder        : Hyunjung Kim (supported by professor Jinkyu Kang)
+% Co-author    : Jaemin Jung
+% Corresponding author    : Jinkyu Kang
+% Organization : ABCLab
+% Start Date   : January 25, 2022.
+% End Date     :
+% Paper Info.  :
+% Title        :
+% Comment      : Simulation code for proposed algorithm
+% Chain()     :
+clc;
+clear all;
+%close all;
+
+
+
+%% Variables Initialization
+K = 20;                     % Algorithm iteration
+epsilon = 1;                 % epsilon
+breakpoint = 1000;           % breakpoint
+N_ante = 1;                  % Antenna
+C_maxSum=0;                  % Sum of C_max (by channel)
+
+% Making channel
+N=3;
+
+for n = 1:N
+    % Channel setting
+    j=sqrt(-1);             % imaginary num
+    
+    dist = 0.5;             % SR distance
+    k_pathloss = 2.7;       % Pathloss exponent
+    
+    v_SD=1;
+    v_SR=dist^(-k_pathloss);                  % variance
+    v_RD=(1-dist)^(-k_pathloss);
+    
+    h_SD=sqrt(v_SD/2).*(randn(1,N_ante)+j*randn(1,N_ante));      % Rayleigh channel
+    h_SR=sqrt(v_SR/2).*(randn(1,N_ante)+j*randn(1,N_ante));
+    h_RD=sqrt(v_RD/2).*(randn(1,N_ante)+j*randn(1,N_ante));
+    
+    p=20;                  % SNR
+    p1=20;
+    p2=20;
+    
+    % t definition
+    t1=(norm(h_SD))^2;
+    t2=(abs(h_SR*(h_SD.'))^2)/(norm(h_SD))^2;
+    t3=(abs(h_RD)).^2;
+    t4=(abs(h_RD*(h_RD.'))^2)/(norm(h_RD)^2);
+    %t5=                  % multiple antenna
+    %t6=
+    
+    G=(sqrt(p/(p1*v_SR+1+p2*v_RD+1)));                  % G amplified
+    %for dist=0:1
+    %% Main
+    
+    % initialization
+    alphaI=0.2;
+    alphaJ=sqrt(1-alphaI^2);
+    lambda_init=0.5;
+    
+    qk=alphaI^2;
+    sk=1-qk;
+    lambda_k=lambda_init;
+        %     while breakpoint > epsilon
+    for t=1:K
+        %% problem1 iteration       
+        
+        % Problem1 >> alphaI^2=q
+        cvx_begin 
+        variable q nonnegative
+        
+        expression C1
+        expression C2
+        expression C3
+        expression C_Rz
+        expression C_Sz
+        expression C_sum
+        
+        C1=log(1+q*p1*t1+((q*G^2*p1*t2*t3)/(p1*t1+G^2*t3+1+G^2*t3*t4*p2)));
+        C2=p1*t2/(1+(qk*p1*t2/(sk*p1*t2+1+t4*p2)))*(q-qk)+log(1+(qk*p1*t2/(sk*p1*t2+1+t4*p2)));
+        C3=log(1+((p1*t1)/(G^2*t3+1+G^2*t3*t4*p2)));
+        
+        C_Rz=1/(1+(sk*p1*t2/(qk*p1*t2+t4*p2+1)))*(-(sk*p1*t2/((qk*p1*t2+t4*p2+1)^2)))*p1*t2*(q-qk)+log(1+(sk*p1*t2/(qk*p1*t2+t4*p2+1)));
+        C_Sz=1/(1+(sk*p1*t1/(qk*p1*t1+1)))*(-(sk*p1*t1/((qk*p1*t1+1)^2)))*p1*t1*(q-qk)+log(1+(sk*p1*t1/(qk*p1*t1+1)));
+        
+        C_sum=((C1-C2)*lambda_k)+(C3*(1-lambda_k));
+        
+        maximize(C_sum)
+        subject to
+        
+        q <= sk;
+        q <= 1;
+        C_Rz-C_Sz <= 0;
+        C_Rz >= 0;
+        C_Sz >= 0;
+        C1 >= 0;
+        C2 >= 0;
+        C3 >= 0;
+        
+        cvx_end
+        qk=q;
+
+        
+        % Problem1 >> alphaJ^2=s
+        cvx_begin
+        variable s nonnegative
+        
+        expression C1
+        expression C2
+        expression C3
+        expression C_Rz
+        expression C_Sz
+        expression C_sum
+        
+        C1=log(1+qk*p1*t1+((qk*G^2*p1*t2*t3)/(p1*t1+G^2*t3+1+G^2*t3*t4*p2)));
+        C2=1/(1+(qk*p1*t2/(sk*p1*t2+1+t4*p2)))*(-(qk*p1*t2/((sk*p1*t2+1+t4*p2)^2)))*p1*t2*(s-sk)+log((1+(qk*p1*t2/(sk*p1*t2+1+t4*p2))));
+        C3=log(1+((p1*t1)/(G^2*t3+1+G^2*t3*t4*p2)));
+        
+        C_Rz=p1*t2/(1+(sk*p1*t2)/(qk*p1*t2+t4*p2+1))*(s-sk)+log(1+(sk*p1*t2)/(qk*p1*t2+t4*p2+1));
+        C_Sz=log(1+(s*p1*t2/(qk*p1*t1+1)));
+        
+        C_sum=((C1-C2)*lambda_k)+(C3*(1-lambda_k));
+        
+        maximize(C_sum)
+        subject to
+        
+        qk <= s;
+        s <= 1;
+        C_Rz-C_Sz <= 0;
+        C_Rz >= 0;
+        C_Sz >= 0;
+        C1 >= 0;
+        C2 >= 0;
+        C3 >= 0;
+        
+        cvx_end
+        sk=s;
+        qk=1-sk;
+        
+        
+        % Problem1 >> lambda
+        cvx_begin 
+        variable lambda nonnegative
+        
+        expression C1
+        expression C2
+        expression C3
+        expression C_Rz
+        expression C_Sz
+        expression C_sum
+        
+        C1=log(1+qk*p1*t1+((qk*G^2*p1*t2*t3)/(p1*t1+G^2*t3+1+G^2*t3*t4*p2)));
+        C2=log(1+(qk*p1*t2/(sk*p1*t2+1+t4*p2)));
+        C3=log(1+((p1*t1)/(G^2*t3+1+G^2*t3*t4*p2)));
+        
+        C_Rz=log(1+(sk*p1*t2)/(qk*p1*t2+t4*p2+1));
+        C_Sz=log(1+(sk*p1*t2/(qk*p1*t1+1)));
+        
+        C_sum=((C1-C2)*lambda)+(C3*(1-lambda));
+        
+        maximize(C_sum)
+        subject to
+        
+        lambda <= 1;
+        
+        cvx_end
+        lambda_k=lambda;
+        
+    end
+    %Cmax for Problem 1
+    Cmax_P1 = log2(1 + 1);
+    
+    %% Main
+    
+    % initialization
+    alphaI=0.2;
+    alphaJ=sqrt(1-alphaI^2);
+    lambda_init=0.5;
+    
+    qk=alphaI^2;
+    sk=1-qk;
+    lambda_k=lambda_init;
+
+        %     while breakpoint > epsilon
+    for t=1:K
+        %% problem2 iteration
+        
+        % Problem2 >> alphaI^2=q
+        cvx_begin 
+        variable q nonnegative
+        
+        expression C1
+        expression C2
+        expression C3
+        expression C_Rz
+        expression C_Sz
+        expression C_sum
+        
+        C1=log(1+q*p1*t1+((q*G^2*p1*t2*t3)/(p1*t1+G^2*t3+1+G^2*t3*t4*p2)));
+        C2=p1*t2/(1+(qk*p1*t2)/(t4*p2+1))*(q-qk)+log(1+(qk*p1*t2)/(t4*p2+1));
+        C3=log(1+((p1*t1)/(G^2*t3+1+G^2*t3*t4*p2)));
+        
+        C_Rz=1/(1+(sk*p1*t2/(qk*p1*t2+t4*p2+1)))*(-(sk*p1*t2/((qk*p1*t2+t4*p2+1)^2)))*p1*t2*(q-qk)+log(1+(sk*p1*t2/(qk*p1*t2+t4*p2+1)));
+        C_Sz=1/(1+(sk*p1*t1/(qk*p1*t1+1)))*(-(sk*p1*t1/((qk*p1*t1+1)^2)))*p1*t1*(q-qk)+log(1+(sk*p1*t1/(qk*p1*t1+1)));
+        
+        C_sum=((C1-C2)*lambda_k)+(C3*(1-lambda_k));
+        
+        maximize(C_sum)
+        subject to
+        
+        q < sk;
+        q <= 1;
+        C_Rz-C_Sz>=0
+        C_Rz >= 0;
+        C_Sz >= 0;
+        C1 >= 0;
+        C2 >= 0;
+        C3 >= 0;
+        
+        cvx_end
+        qk=q;
+        sk=1-q;
+        
+        % Problem2 >> alphaJ^2=s, lambda
+        cvx_begin 
+        variable s nonnegative
+        variable lambda nonnegative
+        
+        expression C1
+        expression C2
+        expression C3
+        expression C_Rz
+        expression C_Sz
+        expression C_sum
+        
+        C1=log(1+alphaI^2*p1*t1+((qk*G^2*p1*t2*t3)/(p1*t1+G^2*t3+1+G^2*t3*t4*p2)));
+        C2=log(1+(qk*p1*t2/(1+t4*p2)));
+        C3=log(1+((p1*t1)/(G^2*t3+1+G^2*t3*t4*p2)));
+        
+        C_Rz=log(1+((s*p1*t2)/(qk*p1*t2+t4*p2+1)));
+        C_Sz=p1*t1/(1+(sk*p1*t1)/(qk*p1*t1+1))*(s-sk)+log(1+(sk*p1*t1)/(qk*p1*t1+1));
+        
+        C_sum=((C1-C2)*lambda)+(C3*(1-lambda));
+        
+        maximize(C_sum)
+        subject to
+        
+        qk < s;
+        s <= 1;
+        C_Rz-C_Sz >= 0
+        lambda <= 1;
+        C_Rz >= 0;
+        C_Sz >= 0;
+        C1 >= 0;
+        C2 >= 0;
+        C3 >= 0;
+        
+        cvx_end
+        sk=s;
+        qk=1-s;
+        lambda_k=lambda;
+        
+        %Cmax
+        Cmax_P2=C_sum;
+     
+        C_max=max(Cmax_P1,Cmax_P2);
+        
+        C_maxSum=C_maxSum+C_max;
+        C_finial=1/N*C_maxSum;
+    end
+end
+
+%% graph
+figure(1)
+plot(dist,C_max)
+grid on
+ylabel('C_sum')
+xlabel('distance(S-R)')
+title('Capacity ber distance(S-R)')
